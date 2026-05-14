@@ -3,7 +3,7 @@ import { supabase } from "./supabase.js";
 
 var EXPIRY_DEFAULTS = {
   "肉・魚": 3, "野菜・果物": 5, "卵・乳製品": 10, "主食": 5,
-  "惣菜&弁当": 2, "加工品": 14, "調味料": 90, "飲料": 30,
+  "惣菜&弁当": 2, "加工品": 14, "飲料": 30,
   "保存食": 60, "嗜好品": 14,
 };
 
@@ -14,7 +14,6 @@ var CAT_INFO = {
   "主食": { emoji: "🍚", color: "#8D6E63" },
   "惣菜&弁当": { emoji: "🍱", color: "#F4511E" },
   "加工品": { emoji: "🥫", color: "#6D4C41" },
-  "調味料": { emoji: "🧂", color: "#78909C" },
   "飲料": { emoji: "🥤", color: "#039BE5" },
   "保存食": { emoji: "📦", color: "#5D4037" },
   "嗜好品": { emoji: "🍫", color: "#AB47BC" },
@@ -256,24 +255,53 @@ function CategoryTab(p) {
 // ═══ FOOD ITEM ═══
 function FoodItem(p) {
   var { item, TD, updateItem, deleteItem } = p;
+  var [showUse, setShowUse] = useState(false);
   var remain = daysDiff(TD, item.expiry);
   var info = CAT_INFO[item.category] || CAT_INFO["その他"];
   var bgColor = remain < 0 ? "#FFEBEE" : remain <= 1 ? "#FFF3E0" : "#fff";
   var statusColor = remain < 0 ? "#E53935" : remain <= 1 ? "#FF9800" : remain <= 3 ? "#FFC107" : "#4CAF50";
   var statusText = remain < 0 ? "期限切れ" + Math.abs(remain) + "日" : remain === 0 ? "今日まで！" : remain === 1 ? "明日まで" : "あと" + remain + "日";
+  var cur = item.remaining !== undefined && item.remaining !== null ? item.remaining : 1;
+  var pctLabel = cur >= 1 ? "" : cur >= 0.75 ? "残3/4" : cur >= 0.5 ? "残1/2" : cur >= 0.25 ? "残1/4" : "少量";
+  var barPct = Math.round(cur * 100);
+
+  var useAmount = function (amount) {
+    var newRemaining = Math.max(0, cur - amount);
+    if (newRemaining <= 0) {
+      updateItem(item.id, { used: true, used_date: TD, remaining: 0 });
+    } else {
+      updateItem(item.id, { remaining: newRemaining });
+    }
+    setShowUse(false);
+  };
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: "1px solid #f3f3f3", background: bgColor, borderRadius: 6, marginBottom: 2 }}>
-      <div style={{ fontSize: 18 }}>{info.emoji}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>{item.name}</div>
-        <div style={{ fontSize: 10, color: "#aaa" }}>{item.category} ・ 購入{dateLabel(item.purchase_date)}</div>
+    <div style={{ borderBottom: "1px solid #f3f3f3", background: bgColor, borderRadius: 6, marginBottom: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px" }}>
+        <div style={{ fontSize: 18 }}>{info.emoji}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>
+            {item.name}
+            {pctLabel && <span style={{ marginLeft: 6, fontSize: 9, background: "#FFF3E0", color: "#E65100", padding: "1px 5px", borderRadius: 6 }}>{pctLabel}</span>}
+          </div>
+          <div style={{ fontSize: 10, color: "#aaa" }}>{item.category} ・ 購入{dateLabel(item.purchase_date)}</div>
+          {cur < 1 && <div style={{ height: 3, background: "#f0f0f0", borderRadius: 2, marginTop: 3, width: 60 }}><div style={{ height: "100%", borderRadius: 2, background: cur > 0.5 ? "#4CAF50" : cur > 0.25 ? "#FF9800" : "#E53935", width: barPct + "%" }} /></div>}
+        </div>
+        <div style={{ textAlign: "right", marginRight: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: statusColor }}>{statusText}</div>
+          <div style={{ fontSize: 9, color: "#bbb" }}>〜{dateLabel(item.expiry)}</div>
+        </div>
+        <button onClick={function(){setShowUse(!showUse)}} style={{ padding:"4px 8px",borderRadius:6,border:"none",background:"#43A047",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer" }}>使う</button>
+        <button onClick={function(){updateItem(item.id,{used:true,wasted:true,used_date:TD})}} style={{ padding:"4px 8px",borderRadius:6,border:"none",background:"#E53935",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer" }}>🗑</button>
       </div>
-      <div style={{ textAlign: "right", marginRight: 4 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: statusColor }}>{statusText}</div>
-        <div style={{ fontSize: 9, color: "#bbb" }}>〜{dateLabel(item.expiry)}</div>
-      </div>
-      <button onClick={function(){updateItem(item.id,{used:true,used_date:TD})}} style={{ padding:"4px 8px",borderRadius:6,border:"none",background:"#4CAF50",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer" }}>✓</button>
-      <button onClick={function(){updateItem(item.id,{used:true,wasted:true,used_date:TD})}} style={{ padding:"4px 8px",borderRadius:6,border:"none",background:"#E53935",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer" }}>🗑</button>
+      {showUse && (
+        <div style={{ display: "flex", gap: 4, padding: "4px 8px 8px", flexWrap: "wrap" }}>
+          <button onClick={function(){useAmount(0.25)}} style={S.useBtn}>1/4使う</button>
+          <button onClick={function(){useAmount(0.5)}} style={S.useBtn}>半分使う</button>
+          <button onClick={function(){useAmount(0.75)}} style={S.useBtn}>3/4使う</button>
+          <button onClick={function(){useAmount(cur)}} style={{...S.useBtn, background:"#4CAF50",color:"#fff"}}>全部使い切り</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -320,7 +348,7 @@ function ImportTab(p) {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: "この画像に写っている食材や食品をすべて特定してください。レシートの場合は品目名を読み取ってください。\n\n以下のJSON形式のみで回答してください。他のテキストは不要です：\n[{\"name\": \"食材名\", \"category\": \"カテゴリ\"}]\n\ncategoryは以下のいずれかにしてください：肉・魚、野菜・果物、卵・乳製品、主食、惣菜&弁当、加工品、調味料、飲料、保存食、嗜好品" }
+            { type: "text", text: "この画像に写っている食材や食品をすべて特定してください。レシートの場合は品目名を読み取ってください。調味料（醤油、塩、砂糖など）は除外してください。\n\n以下のJSON形式のみで回答してください。他のテキストは不要です：\n[{\"name\": \"食材名\", \"category\": \"カテゴリ\"}]\n\ncategoryは以下のいずれかにしてください：肉・魚、野菜・果物、卵・乳製品、主食、惣菜&弁当、加工品、飲料、保存食、嗜好品" }
           ]}] })
         });
         var resData = await res.json();
@@ -359,7 +387,7 @@ function ImportTab(p) {
         for (var j = 0; j < line.length; j++) { var c = line[j]; if (c === '"') inQuote = !inQuote; else if (c === ',' && !inQuote) { fields.push(current); current = ""; } else current += c; }
         fields.push(current);
         var date = fields[0]; var category = fields[2]; var subCategory = fields[3]; var itemName = fields[6];
-        if (category === "食費" && itemName && itemName.trim() && subCategory !== "割引") {
+        if (category === "食費" && itemName && itemName.trim() && subCategory !== "割引" && subCategory !== "調味料") {
           var existing = items.some(function (it) { return it.name === itemName.trim() && it.purchase_date === date && !it.used; });
           if (!existing) {
             var expiryDays = expirySettings[subCategory] || EXPIRY_DEFAULTS[subCategory] || 7;
@@ -410,7 +438,7 @@ function ImportTab(p) {
           <div style={S.card}>
             <div style={S.cardTitle}>🛒 よく買うもの（タップで追加）</div>
             <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>購入データから自動更新されます</div>
-            {["肉・魚","卵・乳製品","野菜・果物","主食","加工品","惣菜&弁当","調味料","飲料","保存食","嗜好品"].map(function(cat){
+            {["肉・魚","卵・乳製品","野菜・果物","主食","加工品","惣菜&弁当","飲料","保存食","嗜好品"].map(function(cat){
               var catItems = byCat[cat]; if (!catItems || catItems.length === 0) return null;
               var info = CAT_INFO[cat] || CAT_INFO["その他"];
               return (
@@ -714,4 +742,5 @@ var S = {
   input: { flex: 1, padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e0e0e0", fontSize: 13, outline: "none", background: "#FAFAFA", fontFamily: "inherit" },
   nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", justifyContent: "space-around", background: "#fff", borderTop: "1px solid #eee", padding: "6px 0 env(safe-area-inset-bottom, 10px)", zIndex: 100 },
   navBtn: { display: "flex", flexDirection: "column", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: "3px 8px" },
+  useBtn: { padding: "6px 12px", borderRadius: 8, border: "1px solid #e0e0e0", background: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#333" },
 };
