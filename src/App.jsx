@@ -113,6 +113,8 @@ export default function App() {
 function FoodItem(p) {
   var item = p.item, TD = p.TD, data = p.data, save = p.save;
   var [showUse, setShowUse] = useState(false);
+  var [showMenu, setShowMenu] = useState(false);
+  var [editExpiry, setEditExpiry] = useState(item.expiry);
   var remain = daysDiff(TD, item.expiry);
   var info = CAT_INFO[item.category] || CAT_INFO["その他"];
   var bgColor = remain < 0 ? "#FFEBEE" : remain <= 1 ? "#FFF3E0" : "#fff";
@@ -125,7 +127,37 @@ function FoodItem(p) {
     if (t.quantity <= 0) { t.used = true; t.usedDate = TD; }
     save(d); setShowUse(false);
   };
-  var markWasted = function () { var d = clone(data); var t = d.items.find(function (i) { return i.id === item.id; }); if (t) { t.used = true; t.wasted = true; t.usedDate = TD; } save(d); };
+  var markWasted = function () {
+    if (!window.confirm("「" + item.name + "」を廃棄しますか？\n（フードロスとしてカウントされます）")) return;
+    var d = clone(data); var t = d.items.find(function (i) { return i.id === item.id; });
+    if (t) { t.used = true; t.wasted = true; t.usedDate = TD; }
+    save(d);
+  };
+  var deleteItem = function () {
+    if (!window.confirm("「" + item.name + "」を削除しますか？\n（誤登録などの取消用。フードロスにはカウントされません）")) return;
+    var d = clone(data);
+    d.items = (d.items || []).filter(function (i) { return i.id !== item.id; });
+    save(d);
+    setShowMenu(false);
+  };
+  var updateExpiry = function () {
+    if (!editExpiry) return;
+    var d = clone(data);
+    var t = d.items.find(function (i) { return i.id === item.id; });
+    if (t) { t.expiry = editExpiry; }
+    save(d);
+    setShowMenu(false);
+  };
+  var toggleMenu = function () {
+    var next = !showMenu;
+    setShowMenu(next);
+    if (next) { setEditExpiry(item.expiry); setShowUse(false); }
+  };
+  var toggleUse = function () {
+    var next = !showUse;
+    setShowUse(next);
+    if (next) setShowMenu(false);
+  };
   var useOptions = [];
   if (item.unit === "g" || item.unit === "kg" || item.unit === "ml" || item.unit === "L") {
     var q = item.quantity;
@@ -139,14 +171,25 @@ function FoodItem(p) {
   }
   return (
     <div style={{ borderBottom: "1px solid #f3f3f3", background: bgColor, borderRadius: 6, marginBottom: 2 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 4px" }}>
         <div style={{ fontSize: 18 }}>{info.emoji}</div>
-        <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{item.name}<span style={{ marginLeft: 6, fontSize: 10, color: "#666", fontWeight: 400 }}>{qtyLabel}</span></div><div style={{ fontSize: 10, color: "#aaa" }}>{item.category} ・ 購入{dateLabel(item.purchaseDate)}</div></div>
-        <div style={{ textAlign: "right", marginRight: 4 }}><div style={{ fontSize: 11, fontWeight: 800, color: statusColor }}>{statusText}</div><div style={{ fontSize: 9, color: "#bbb" }}>〜{dateLabel(item.expiry)}</div></div>
-        <button onClick={function(){setShowUse(!showUse)}} style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#43A047",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer"}}>使う</button>
-        <button onClick={markWasted} style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#E53935",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer"}}>🗑</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{item.name}<span style={{ marginLeft: 6, fontSize: 10, color: "#666", fontWeight: 400 }}>{qtyLabel}</span></div><div style={{ fontSize: 10, color: "#aaa" }}>{item.category} ・ 購入{dateLabel(item.purchaseDate)}</div></div>
+        <div style={{ textAlign: "right", marginRight: 2 }}><div style={{ fontSize: 11, fontWeight: 800, color: statusColor }}>{statusText}</div><div style={{ fontSize: 9, color: "#bbb" }}>〜{dateLabel(item.expiry)}</div></div>
+        <button onClick={toggleUse} style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#43A047",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer"}}>使う</button>
+        <button onClick={markWasted} title="廃棄（フードロスにカウント）" style={{padding:"4px 6px",borderRadius:6,border:"none",background:"#E53935",color:"#fff",fontWeight:700,fontSize:10,cursor:"pointer",lineHeight:1.2}}>🗑<div style={{fontSize:8,fontWeight:700,marginTop:1}}>廃棄</div></button>
+        <button onClick={toggleMenu} title="編集・削除" style={{padding:"4px 8px",borderRadius:6,border:"1px solid #cfd8dc",background:showMenu?"#ECEFF1":"#fff",color:"#546E7A",fontWeight:700,fontSize:14,cursor:"pointer",lineHeight:1}}>⋯</button>
       </div>
       {showUse && (<div style={{ display: "flex", gap: 4, padding: "4px 8px 8px", flexWrap: "wrap" }}>{useOptions.map(function (opt) { return <button key={opt.label} onClick={function(){useAmount(opt.amount)}} style={{...S.useBtn, background: opt.green ? "#4CAF50" : "#fff", color: opt.green ? "#fff" : "#333"}}>{opt.label}</button>; })}</div>)}
+      {showMenu && (
+        <div style={{ padding: "8px 10px 10px", borderTop: "1px dashed #e0e0e0", background: "#FAFAFA", borderRadius: "0 0 6px 6px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#666", marginBottom: 4 }}>📅 賞味期限を変更</div>
+          <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+            <input type="date" value={editExpiry} onChange={function(e){setEditExpiry(e.target.value)}} style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1.5px solid #e0e0e0", fontSize: 12, background: "#fff", fontFamily: "inherit" }} />
+            <button onClick={updateExpiry} disabled={!editExpiry || editExpiry === item.expiry} style={{ padding: "4px 14px", borderRadius: 6, border: "none", background: (!editExpiry || editExpiry === item.expiry) ? "#bdbdbd" : "#43A047", color: "#fff", fontWeight: 700, fontSize: 11, cursor: (!editExpiry || editExpiry === item.expiry) ? "default" : "pointer" }}>更新</button>
+          </div>
+          <button onClick={deleteItem} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #E53935", background: "#fff", color: "#E53935", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>❌ 削除（誤登録のとき・廃棄カウントなし）</button>
+        </div>
+      )}
     </div>
   );
 }
